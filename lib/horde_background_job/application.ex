@@ -12,8 +12,8 @@ defmodule HordeTaskRouter.Application do
       HordeTaskRouter.HordeRegistry,
       HordeTaskRouter.HordeSupervisor,
       HordeTaskRouter.NodeObserver,
-      {HordeTaskRouter.DatabaseCleaner.Starter,
-       [name: HordeTaskRouter.DatabaseCleaner, timeout: :timer.seconds(2)]}
+      {HordeTaskRouter.Router.Starter,
+       [name: HordeTaskRouter.Router, timeout: :timer.seconds(2)]}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

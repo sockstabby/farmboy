@@ -24,7 +24,7 @@ be found at [https://hexdocs.pm/horde_background_job](https://hexdocs.pm/horde_b
 
 my model is a little different
 
-they supervise DatabaseCleaner - a genserver with an execute method that
+they supervise Router - a genserver with an execute method that
 calls a task. ( in same node )
 
 my case 

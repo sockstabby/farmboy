@@ -1,4 +1,4 @@
-defmodule HordeTaskRouter.DatabaseCleaner do
+defmodule HordeTaskRouter.Router do
   @moduledoc """
   Fake module that emulates deleting records randomly.
   """
