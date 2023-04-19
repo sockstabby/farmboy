@@ -18,6 +18,7 @@ defmodule HordeTaskRouter.Router do
   end
 
   @impl GenServer
+  @spec init(non_neg_integer) :: {:ok, non_neg_integer}
   def init(timeout) do
     schedule(timeout)
     {:ok, timeout}
