@@ -1,4 +1,4 @@
-defmodule HordeBackgroundJob.Application do
+defmodule HordeTaskRouter.Application do
   # See https://hexdocs.pm/elixir/Application.html
   # for more information on OTP Applications
   @moduledoc false
@@ -9,16 +9,16 @@ defmodule HordeBackgroundJob.Application do
   def start(_type, _args) do
     children = [
       {Cluster.Supervisor, [topologies(), [name: BackgroundJob.ClusterSupervisor]]},
-      HordeBackgroundJob.HordeRegistry,
-      HordeBackgroundJob.HordeSupervisor,
-      HordeBackgroundJob.NodeObserver,
-      {HordeBackgroundJob.DatabaseCleaner.Starter,
-       [name: HordeBackgroundJob.DatabaseCleaner, timeout: :timer.seconds(2)]}
+      HordeTaskRouter.HordeRegistry,
+      HordeTaskRouter.HordeSupervisor,
+      HordeTaskRouter.NodeObserver,
+      {HordeTaskRouter.DatabaseCleaner.Starter,
+       [name: HordeTaskRouter.DatabaseCleaner, timeout: :timer.seconds(2)]}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
-    opts = [strategy: :one_for_one, name: HordeBackgroundJob.Supervisor]
+    opts = [strategy: :one_for_one, name: HordeTaskRouter.Supervisor]
     Supervisor.start_link(children, opts)
   end
 

@@ -1,8 +1,8 @@
-defmodule HordeBackgroundJobTest do
+defmodule HordeTaskRouterTest do
   use ExUnit.Case
-  doctest HordeBackgroundJob
+  doctest HordeTaskRouter
 
   test "greets the world" do
-    assert HordeBackgroundJob.hello() == :world
+    assert HordeTaskRouter.hello() == :world
   end
 end

@@ -1,4 +1,4 @@
-defmodule HordeBackgroundJob.HordeSupervisor do
+defmodule HordeTaskRouter.HordeSupervisor do
   use Horde.DynamicSupervisor
 
   def start_link(_) do

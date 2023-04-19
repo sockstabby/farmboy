@@ -1,4 +1,4 @@
-defmodule HordeBackgroundJob.HordeRegistry do
+defmodule HordeTaskRouter.HordeRegistry do
   use Horde.Registry
 
   def start_link(_) do

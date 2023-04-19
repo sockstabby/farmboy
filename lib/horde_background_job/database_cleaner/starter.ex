@@ -1,4 +1,4 @@
-defmodule HordeBackgroundJob.DatabaseCleaner.Starter do
+defmodule HordeTaskRouter.DatabaseCleaner.Starter do
   @moduledoc """
   Module in charge of starting and monitoring  the `DatabaseCleaner`
   process, restarting it when necessary.
@@ -6,7 +6,7 @@ defmodule HordeBackgroundJob.DatabaseCleaner.Starter do
 
   require Logger
 
-  alias HordeBackgroundJob.{DatabaseCleaner, HordeRegistry, HordeSupervisor}
+  alias HordeTaskRouter.{DatabaseCleaner, HordeRegistry, HordeSupervisor}
 
   def child_spec(opts) do
     %{

@@ -1,8 +1,8 @@
-defmodule HordeBackgroundJob.NodeObserver do
+defmodule HordeTaskRouter.NodeObserver do
   use GenServer
   require Logger
 
-  alias HordeBackgroundJob.{HordeRegistry, HordeSupervisor}
+  alias HordeTaskRouter.{HordeRegistry, HordeSupervisor}
 
   def start_link(_), do: GenServer.start_link(__MODULE__, [])
 

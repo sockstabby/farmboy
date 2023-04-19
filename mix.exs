@@ -1,4 +1,4 @@
-defmodule HordeBackgroundJob.MixProject do
+defmodule HordeTaskRouter.MixProject do
   use Mix.Project
 
   def project do
@@ -15,7 +15,7 @@ defmodule HordeBackgroundJob.MixProject do
   def application do
     [
       extra_applications: [:logger],
-      mod: {HordeBackgroundJob.Application, []}
+      mod: {HordeTaskRouter.Application, []}
     ]
   end
 
