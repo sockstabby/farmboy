@@ -10,7 +10,6 @@ defmodule HordeTaskRouter.Application do
     children = [
       {Cluster.Supervisor, [topologies(), [name: BackgroundJob.ClusterSupervisor]]},
       HordeTaskRouter.HordeRegistry,
-      {Horde.Registry, keys: :unique, name: HordeTaskRouter.TaskRegistry},
       HordeTaskRouter.HordeSupervisor,
       HordeTaskRouter.NodeObserver,
       {HordeTaskRouter.Router.Starter,

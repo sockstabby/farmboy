@@ -23,6 +23,27 @@ defmodule HordeTaskRouter.Router do
 
   end
 
+
+  def monitor_global_task(nil) do
+    Logger.debug("monitor_global_task nil")
+
+    schedule(10_000)
+
+  end
+
+  def monitor_global_task( [ task | _tail] ) do
+    Logger.debug("monitor_global_task []")
+
+    %{pid: pid } = task
+
+     Logger.debug("pid = ")
+
+     IO.inspect(pid)
+
+     Process.link(pid)
+
+  end
+
   @impl GenServer
   @spec init(non_neg_integer) :: {:ok, non_neg_integer}
   def init(timeout) do
@@ -34,17 +55,19 @@ defmodule HordeTaskRouter.Router do
 
     value = get_global_tasks()
 
-    Logger.debug("value = ")
+    monitor_global_task(value)
 
+
+    #Logger.debug("value = ")
+    #IO.inspect(value)
+    #Logger.debug("after")
+    Logger.debug("global tasks = ")
     IO.inspect(value)
 
-    Logger.debug("after")
 
 
-    Logger.debug("global tasks = ")
     #IO.inspect(tasks)
-
-    schedule(timeout)
+    #schedule(timeout)
     {:ok, timeout}
   end
 
@@ -53,35 +76,41 @@ defmodule HordeTaskRouter.Router do
   @impl GenServer
   def handle_info(:execute, timeout) do
 
+    #value = get_global_tasks()
 
-    Process.sleep(5000)
+    Logger.debug("handle_info :execute")
 
+    # foo is the the first_dist task project
+    #task = Task.Supervisor.async({Chat.TaskSupervisor, :foo@localhost}, FirstDistributedTask, :hello, [12])
 
-    value = get_global_tasks()
+    task = Task.Supervisor.async_nolink({Chat.TaskSupervisor, :foo@localhost}, FirstDistributedTask, :hello, [12])
 
-    Logger.debug("handle_info value = ")
-
-    IO.inspect(value)
-
-
-    Process.sleep(5000)
+    IO.inspect(task)
 
 
+    Horde.Registry.put_meta(HordeTaskRouter.HordeRegistry, "tasks", [task])
 
-    task = Task.Supervisor.async({Chat.TaskSupervisor, :foo@localhost}, FirstDistributedTask, :hello, [12])
+    #Process.sleep(1000 * 10)
+
+    #GenServer.cast({:via, Horde.Registry, {HordeTaskRouter.HordeRegistry, "client"}}, {:monitor_task, task})
+
     #IO.inspect(task)
 
-    Horde.Registry.put_meta( HordeTaskRouter.TaskRegistry, "tasks", [task])
+    #client12@127.0.0.1
 
-    Logger.debug("after put reading")
+    #Horde.Registry.put_meta(HordeTaskRouter.TaskRegistry, "tasks", [task])
 
-    Process.sleep(5000)
 
-    {:ok, tasks } = Horde.Registry.meta(HordeTaskRouter.TaskRegistry, "tasks")
 
-    IO.inspect(tasks)
+    #Logger.debug("after put reading")
 
-    Logger.debug("after reading")
+    #Process.sleep(5000)
+
+    #{:ok, tasks } = Horde.Registry.meta(HordeTaskRouter.TaskRegistry, "tasks")
+
+    #IO.inspect(tasks)
+
+    #Logger.debug("after reading")
 
     {:noreply, timeout}
   end
@@ -126,7 +155,7 @@ defmodule HordeTaskRouter.Router do
 
   defp get_global_tasks() do
 
-    case Horde.Registry.meta(HordeTaskRouter.TaskRegistry, "tasks") do
+    case Horde.Registry.meta(HordeTaskRouter.HordeRegistry, "tasks") do
       {:ok, tasks} ->
         tasks
       :error ->
