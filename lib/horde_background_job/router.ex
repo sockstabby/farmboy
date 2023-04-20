@@ -20,24 +20,27 @@ defmodule HordeTaskRouter.Router do
   end
 
 
-  def monitor_global_task(nil) do
-    Logger.debug("monitor_global_task nil")
+  def monitor_global_tasks([]) do
+    Logger.debug("all done. monitor_global_task empty")
   end
 
-  def monitor_global_task( [ task | _tail] ) do
-    Logger.debug("monitor_global_task []")
+  def monitor_global_tasks([task | tail]) do
+    Logger.debug("we have some tasks to monitor")
     %{pid: pid } = task
-     Logger.debug("pid = ")
+     Logger.debug("monitorig pid = ")
      IO.inspect(pid)
      Process.link(pid)
+     monitor_global_tasks(tail)
   end
 
   @impl true
   @spec init(non_neg_integer) :: {:ok, non_neg_integer}
   def init(timeout) do
+    Logger.debug("init called")
+
     Process.flag(:trap_exit, true)
     value = get_global_tasks()
-    monitor_global_task(value)
+    monitor_global_tasks(value)
     Logger.debug("global tasks = ")
     IO.inspect(value)
     {:ok, timeout}
@@ -45,8 +48,27 @@ defmodule HordeTaskRouter.Router do
 
   @impl true
   def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
-    IO.puts("DOWN CALLED ref = ")
+    Logger.debug("DOWN CALLED ref = ")
     IO.inspect(ref)
+    Process.sleep(500)
+
+    Logger.debug("tasks before filter =")
+    tasks = get_global_tasks()
+    IO.inspect(tasks)
+    Process.sleep(500)
+
+    # x != ref
+    filtered = Enum.filter(tasks, fn x -> x.ref != ref end)
+
+    Logger.debug("tasks after filter =")
+    IO.inspect(filtered)
+    #Process.sleep(500)
+
+
+    #find the reference in the list of tasks
+
+
+
     #{:noreply, state}
     {:noreply, state}
   end
@@ -57,7 +79,7 @@ defmodule HordeTaskRouter.Router do
     {:noreply, state}
   end
 
-  @impl GenServer
+  @impl true
   def handle_cast({:run_task, %{object: _o, method: _m, args: _a} }, state) do
     Logger.debug("handle_cast")
     #Logger.debug("o=#{o}")
@@ -67,11 +89,16 @@ defmodule HordeTaskRouter.Router do
 
     task = Task.Supervisor.async_nolink({Chat.TaskSupervisor, :foo@localhost}, FirstDistributedTask, :hello, [12])
     IO.inspect(task)
-    Horde.Registry.put_meta(HordeTaskRouter.HordeRegistry, "tasks", [task])
-
+    append_task_to_global_tasks(task)
+    #Horde.Registry.put_meta(HordeTaskRouter.HordeRegistry, "tasks", [task])
     {:noreply, state}
   end
 
+  def append_task_to_global_tasks(task) do
+    tasks = get_global_tasks()
+    new_tasks = [task | tasks]
+    Horde.Registry.put_meta(HordeTaskRouter.HordeRegistry, "tasks", new_tasks)
+  end
 
 
   def via_tuple(name), do: {:via, Horde.Registry, {HordeTaskRouter.HordeRegistry, name}}
@@ -82,7 +109,7 @@ defmodule HordeTaskRouter.Router do
       {:ok, tasks} ->
         tasks
       :error ->
-        nil
+        []
     end
   end
 
