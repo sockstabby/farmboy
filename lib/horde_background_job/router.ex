@@ -12,21 +12,9 @@ defmodule HordeTaskRouter.Router do
 
   def start_link(opts) do
     #name = Keyword.get(opts, :name, __MODULE__)
-
     name = "taskrouter"
-
-    Logger.debug("name =")
-    IO.inspect( name )
-
-
-    Logger.debug("getting tuple name")
     tname = via_tuple(name)
-
     IO.inspect( tname )
-
-    Logger.debug("done getting tuple name")
-
-
     timeout = Keyword.get(opts, :timeout, @default_timeout)
 
     #GenServer.start_link(__MODULE__, timeout, name: name)
@@ -38,21 +26,50 @@ defmodule HordeTaskRouter.Router do
   @impl GenServer
   @spec init(non_neg_integer) :: {:ok, non_neg_integer}
   def init(timeout) do
+    Logger.debug("initializing")
+
     Process.flag(:trap_exit, true)
+
+    Logger.debug("before")
+
+    value = get_global_tasks()
+
+    Logger.debug("value = ")
+
+    IO.inspect(value)
+
+    Logger.debug("after")
+
+
+    Logger.debug("global tasks = ")
+    #IO.inspect(tasks)
 
     schedule(timeout)
     {:ok, timeout}
   end
 
+
+
   @impl GenServer
   def handle_info(:execute, timeout) do
 
-    Logger.debug("calling the task hello")
+
+    Process.sleep(5000)
+
+
+    value = get_global_tasks()
+
+    Logger.debug("handle_info value = ")
+
+    IO.inspect(value)
+
+
+    Process.sleep(5000)
+
+
 
     task = Task.Supervisor.async({Chat.TaskSupervisor, :foo@localhost}, FirstDistributedTask, :hello, [12])
-    Logger.debug("called the task hello")
-
-    IO.inspect(task)
+    #IO.inspect(task)
 
     Horde.Registry.put_meta( HordeTaskRouter.TaskRegistry, "tasks", [task])
 
@@ -106,5 +123,15 @@ defmodule HordeTaskRouter.Router do
   end
 
   def via_tuple(name), do: {:via, Horde.Registry, {HordeTaskRouter.HordeRegistry, name}}
+
+  defp get_global_tasks() do
+
+    case Horde.Registry.meta(HordeTaskRouter.TaskRegistry, "tasks") do
+      {:ok, tasks} ->
+        tasks
+      :error ->
+        nil
+    end
+  end
 
 end
