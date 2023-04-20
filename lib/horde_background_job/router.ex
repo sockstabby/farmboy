@@ -57,19 +57,15 @@ defmodule HordeTaskRouter.Router do
     IO.inspect(tasks)
     Process.sleep(500)
 
-    # x != ref
     filtered = Enum.filter(tasks, fn x -> x.ref != ref end)
 
     Logger.debug("tasks after filter =")
     IO.inspect(filtered)
     #Process.sleep(500)
 
-
-    #find the reference in the list of tasks
-
-
-
-    #{:noreply, state}
+    # not atomic. however if we can guarantee that this is the only process running,
+    # we dont need to worry about it
+    Horde.Registry.put_meta(HordeTaskRouter.HordeRegistry, "tasks", filtered)
     {:noreply, state}
   end
 
