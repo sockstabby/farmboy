@@ -90,6 +90,14 @@ defmodule HordeTaskRouter.Router do
     {:noreply, state}
   end
 
+  @impl true
+  def handle_cast({:get_tasks }, state) do
+    Logger.debug("get_tasks")
+    tasks = get_global_tasks()
+    IO.inspect(tasks)
+    {:noreply, state }
+  end
+
   def append_task_to_global_tasks(task) do
     tasks = get_global_tasks()
     new_tasks = [task | tasks]
