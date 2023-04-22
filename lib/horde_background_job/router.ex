@@ -16,7 +16,15 @@ defmodule HordeTaskRouter.Router do
     tname = via_tuple(name)
     IO.inspect( tname )
     timeout = Keyword.get(opts, :timeout, @default_timeout)
-    GenServer.start_link(__MODULE__, timeout, name: via_tuple(name))
+
+    case GenServer.start_link(__MODULE__, timeout, name: via_tuple(name)) do
+      {:ok, pid} ->
+        {:ok, pid}
+
+      {:error, {:already_started, pid}} ->
+        Logger.debug("already started at #{inspect(pid)}, returning :ignore")
+        :ignore
+      end
   end
 
 
@@ -76,14 +84,14 @@ defmodule HordeTaskRouter.Router do
   end
 
   @impl true
-  def handle_cast({:run_task, %{object: _o, method: _m, args: _a} }, state) do
+  def handle_cast({:run_task, %{object: object, method: method, args: args, roomid: roomid} }, state) do
     Logger.debug("handle_cast")
     #Logger.debug("o=#{o}")
     #Logger.debug("m=#{m}")
     #IO.puts("a =")
     #IO.inspect(a)
 
-    task = Task.Supervisor.async_nolink({Chat.TaskSupervisor, :foo@localhost}, FirstDistributedTask, :hello, [12])
+    task = Task.Supervisor.async_nolink({Chat.TaskSupervisor, :"foo@127.0.0.1"}, FirstDistributedTask, String.to_atom(method), args)
     IO.inspect(task)
     append_task_to_global_tasks(task)
     #Horde.Registry.put_meta(HordeTaskRouter.HordeRegistry, "tasks", [task])
