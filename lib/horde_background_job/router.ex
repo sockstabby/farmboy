@@ -91,7 +91,7 @@ defmodule HordeTaskRouter.Router do
     #IO.puts("a =")
     #IO.inspect(a)
 
-    task = Task.Supervisor.async_nolink({Chat.TaskSupervisor, :"foo@127.0.0.1"}, FirstDistributedTask, String.to_atom(method), args)
+    task = Task.Supervisor.async_nolink({Chat.TaskSupervisor, :"foo@127.0.0.1"}, FirstDistributedTask, String.to_atom(method), [roomid, args])
     IO.inspect(task)
     append_task_to_global_tasks(task)
     #Horde.Registry.put_meta(HordeTaskRouter.HordeRegistry, "tasks", [task])
