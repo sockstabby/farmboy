@@ -85,16 +85,18 @@ defmodule HordeTaskRouter.Router do
 
   @impl true
   def handle_cast({:run_task, %{object: object, method: method, args: args, roomid: roomid} }, state) do
-    Logger.debug("handle_cast")
-    #Logger.debug("o=#{o}")
-    #Logger.debug("m=#{m}")
-    #IO.puts("a =")
-    #IO.inspect(a)
+    available_workers =
+        Node.list
+        |> Enum.map(fn x -> Atom.to_string(x) end )
+        |> Enum.filter(fn x -> String.contains?(x, "worker") end )
 
-    task = Task.Supervisor.async_nolink({Chat.TaskSupervisor, :"foo@127.0.0.1"}, FirstDistributedTask, String.to_atom(method), [roomid, args])
+    [ worker_node | _tail ] = available_workers
+
+    String.to_atom(method)
+
+    task = Task.Supervisor.async_nolink({Chat.TaskSupervisor,  String.to_atom(worker_node)}, FirstDistributedTask, String.to_atom(method), [roomid, args])
     IO.inspect(task)
     append_task_to_global_tasks(task)
-    #Horde.Registry.put_meta(HordeTaskRouter.HordeRegistry, "tasks", [task])
     {:noreply, state}
   end
 
