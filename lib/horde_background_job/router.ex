@@ -51,7 +51,8 @@ defmodule HordeTaskRouter.Router do
     monitor_global_tasks(value)
     Logger.debug("global tasks = ")
     IO.inspect(value)
-    {:ok, timeout}
+
+    {:ok, %{count: 0}}
   end
 
   @impl true
@@ -84,20 +85,35 @@ defmodule HordeTaskRouter.Router do
   end
 
   @impl true
-  def handle_cast({:run_task, %{object: object, method: method, args: args, roomid: roomid} }, state) do
+  def handle_cast({:run_task, %{object: _object, method: method, args: args, roomid: roomid} }, state) do
+
     available_workers =
         Node.list
         |> Enum.map(fn x -> Atom.to_string(x) end )
         |> Enum.filter(fn x -> String.contains?(x, "worker") end )
 
-    [ worker_node | _tail ] = available_workers
 
-    String.to_atom(method)
+
+    IO.inspect(available_workers)
+
+    total_workers = length(available_workers)
+    worker_index = rem(state.count, total_workers)
+
+    IO.inspect("worker count = #{total_workers}")
+    IO.inspect("worker_index = #{worker_index}")
+
+    IO.inspect("count = #{state.count}")
+
+    worker_node = Enum.at(available_workers, worker_index)
+    IO.inspect("worker node = #{worker_node}")
+
+
 
     task = Task.Supervisor.async_nolink({Chat.TaskSupervisor,  String.to_atom(worker_node)}, FirstDistributedTask, String.to_atom(method), [roomid, args])
     IO.inspect(task)
     append_task_to_global_tasks(task)
-    {:noreply, state}
+
+    {:noreply, %{count: state.count + 1} }
   end
 
   @impl true
