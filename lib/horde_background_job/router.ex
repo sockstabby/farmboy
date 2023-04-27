@@ -85,7 +85,7 @@ defmodule HordeTaskRouter.Router do
   end
 
   @impl true
-  def handle_cast({:run_task, %{object: _object, method: method, args: args, roomid: roomid} }, state) do
+  def handle_cast({:run_task, %{object: _object, method: method, args: args, roomid: roomid, origin_node: origin_node} }, state) do
 
     available_workers =
         Node.list
@@ -109,7 +109,7 @@ defmodule HordeTaskRouter.Router do
 
 
 
-    task = Task.Supervisor.async_nolink({Chat.TaskSupervisor,  String.to_atom(worker_node)}, FirstDistributedTask, String.to_atom(method), [roomid, args])
+    task = Task.Supervisor.async_nolink({Chat.TaskSupervisor,  String.to_atom(worker_node)}, FirstDistributedTask, String.to_atom(method), [roomid, origin_node, args])
     IO.inspect(task)
     append_task_to_global_tasks(task)
 
