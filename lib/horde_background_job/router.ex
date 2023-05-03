@@ -84,6 +84,9 @@ defmodule HordeTaskRouter.Router do
     {:noreply, state}
   end
 
+
+  # the following function can be called from the UI
+  # or from the scheduler.
   @impl true
   def handle_cast({:run_task, %{object: _object, method: method, args: args, roomid: roomid, origin_node: origin_node} }, state) do
 
@@ -106,8 +109,6 @@ defmodule HordeTaskRouter.Router do
 
     worker_node = Enum.at(available_workers, worker_index)
     IO.inspect("worker node = #{worker_node}")
-
-
 
     task = Task.Supervisor.async_nolink({Chat.TaskSupervisor,  String.to_atom(worker_node)}, FirstDistributedTask, String.to_atom(method), [roomid, origin_node, args])
     IO.inspect(task)
