@@ -11,9 +11,7 @@ defmodule HordeTaskRouter.Application do
       {Cluster.Supervisor, [topologies(), [name: BackgroundJob.ClusterSupervisor]]},
       HordeTaskRouter.HordeRegistry,
       HordeTaskRouter.HordeSupervisor,
-      HordeTaskRouter.NodeObserver,
-      {HordeTaskRouter.Router.Starter,
-       [name: HordeTaskRouter.Router, timeout: :timer.seconds(2)]}
+      HordeTaskRouter.NodeObserver
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
