@@ -6,15 +6,10 @@ defmodule HordeTaskRouter.Router do
   use GenServer
   require Logger
 
-  alias __MODULE__.Runner
-
-  @default_timeout :timer.seconds(2)
-
   def start_link(opts) do
     name = "taskrouter"
-    timeout = Keyword.get(opts, :timeout, @default_timeout)
 
-    case GenServer.start_link(__MODULE__, timeout, name: via_tuple(name)) do
+    case GenServer.start_link(__MODULE__, nil, name: via_tuple(name)) do
       {:ok, pid} ->
         {:ok, pid}
 
@@ -39,7 +34,7 @@ defmodule HordeTaskRouter.Router do
   end
 
   @impl true
-  def init(_timeout) do
+  def init(_opts) do
     :net_kernel.monitor_nodes(true, node_type: :visible)
     IO.inspect(self())
     Process.flag(:trap_exit, true)
@@ -51,7 +46,17 @@ defmodule HordeTaskRouter.Router do
 
     Logger.debug("global tasks = #{tasks}")
 
-    {:ok, %{count: 0, tasks: tasks}}
+    available_workers =
+      Node.list
+      |> Enum.map(fn x -> Atom.to_string(x) end )
+      |> Enum.filter(fn x -> String.contains?(x, "worker") end )
+
+
+    _deets = Enum.map(available_workers, fn worker_node ->
+        %{worker: worker_node, task: Task.Supervisor.async_nolink({Chat.TaskSupervisor,  String.to_atom(worker_node)}, FirstDistributedTask, String.to_atom("get_worker_details"), []) }
+    end)
+
+    {:ok, %{count: 0, tasks: tasks, worker_details: %{} }}
   end
 
   @impl true
@@ -87,21 +92,22 @@ defmodule HordeTaskRouter.Router do
   end
 
   @impl true
+  def handle_info({ ref, %{worker_registration: deets}}, state) do
+    %{ host: host, items: work} = deets
+
+    Logger.debug("host: #{inspect(host)}")
+    Logger.debug("work: #{inspect(work)}")
+
+    new_worker_details = Map.put(state.worker_details, host, work)
+    new_state = Map.put(state, :worker_details, new_worker_details)
+    {:noreply, new_state}
+  end
+
+  @impl true
   def handle_info(msg, state) do
     IO.puts("Unexpected message in handle_info: #{inspect(msg)}")
     {:noreply, state}
   end
-
-
-  @impl true
-  def handle_cast({:register_worker, deets }, state) do
-
-    Logger.debug("A worker has registered itself")
-
-    IO.inspect(deets)
-    {:noreply, state}
-  end
-
 
   # the following function can be called from the UI
   # or from the scheduler.
