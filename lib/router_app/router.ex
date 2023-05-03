@@ -26,7 +26,7 @@ defmodule HordeTaskRouter.Router do
 
 
   def monitor_global_tasks([]) do
-    Logger.debug("all done. monitor_global_task empty")
+    Logger.debug("monitor_global_task empty")
   end
 
   def monitor_global_tasks([task | tail]) do
@@ -40,44 +40,50 @@ defmodule HordeTaskRouter.Router do
 
   @impl true
   def init(_timeout) do
-    Logger.debug("init called ")
-
+    :net_kernel.monitor_nodes(true, node_type: :visible)
     IO.inspect(self())
-
     Process.flag(:trap_exit, true)
     tasks = get_global_tasks()
-
-    IO.inspect(tasks)
-
     Horde.Registry.put_meta(HordeTaskRouter.HordeRegistry, "tasks", [])
 
     #important that we do this
     monitor_global_tasks(tasks)
 
-    Logger.debug("global tasks = ")
-    IO.inspect(tasks)
+    Logger.debug("global tasks = #{tasks}")
 
     {:ok, %{count: 0, tasks: tasks}}
   end
 
   @impl true
   def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
-    Logger.debug("DOWN CALLED ref = ")
+    Logger.debug("DOWN CALLED")
     IO.inspect(ref)
     tasks = Map.get(state, :tasks)
 
     filtered = Enum.filter(tasks, fn x -> x.ref != ref end)
 
-    Logger.debug("tasks after filter =")
+    Logger.debug("tasks after filter")
     IO.inspect(filtered)
 
     {:noreply, Map.put(state, :tasks, filtered )}
   end
 
   @impl true
-  def handle_info({:exit, reason}, _state) do
-    IO.inspect(":exit received")
+  def handle_info({:exit, reason}, state) do
+    Logger.info(":exit received")
     exit(reason)
+    {:noreply, state}
+  end
+
+  def handle_info({:nodeup, _node, _node_type}, state) do
+    Logger.debug("node up in genserver message")
+    {:noreply, state}
+  end
+
+  def handle_info({:nodedown, _node, _node_type}, state) do
+    Logger.debug("node down in genserver message")
+    #here we need to remove whatever task info we have on this node
+    {:noreply, state}
   end
 
   @impl true
@@ -85,6 +91,17 @@ defmodule HordeTaskRouter.Router do
     IO.puts("Unexpected message in handle_info: #{inspect(msg)}")
     {:noreply, state}
   end
+
+
+  @impl true
+  def handle_cast({:register_worker, deets }, state) do
+
+    Logger.debug("A worker has registered itself")
+
+    IO.inspect(deets)
+    {:noreply, state}
+  end
+
 
   # the following function can be called from the UI
   # or from the scheduler.
@@ -96,20 +113,21 @@ defmodule HordeTaskRouter.Router do
         |> Enum.map(fn x -> Atom.to_string(x) end )
         |> Enum.filter(fn x -> String.contains?(x, "worker") end )
 
-    IO.inspect(available_workers)
+    #IO.inspect(available_workers)
+    Logger.info("available workers = #{available_workers}")
 
     total_workers = length(available_workers)
     worker_index = rem(state.count, total_workers)
 
-    IO.inspect("worker count = #{total_workers}")
-    IO.inspect("worker_index = #{worker_index}")
-    IO.inspect("count = #{state.count}")
+    Logger.info("worker count = #{total_workers}")
+    Logger.info("worker_index = #{worker_index}")
+    Logger.info("count = #{state.count}")
 
     worker_node = Enum.at(available_workers, worker_index)
-    IO.inspect("worker node = #{worker_node}")
+    Logger.info("worker node = #{worker_node}")
 
     task = Task.Supervisor.async_nolink({Chat.TaskSupervisor,  String.to_atom(worker_node)}, FirstDistributedTask, String.to_atom(method), [roomid, origin_node, args])
-    IO.inspect(task)
+    Logger.info(task)
 
     new_state = Map.put(state, :count, state.count + 1 )
     new_tasks = [task | state.tasks]
@@ -123,6 +141,7 @@ defmodule HordeTaskRouter.Router do
     #save off our task state state
     Horde.Registry.put_meta(HordeTaskRouter.HordeRegistry, "tasks", state.tasks)
     Logger.info("saving state to horde memory")
+    {:noreply, state }
   end
 
   def via_tuple(name), do: {:via, Horde.Registry, {HordeTaskRouter.HordeRegistry, name}}

@@ -12,8 +12,10 @@ defmodule HordeTaskRouter.NodeObserver do
     {:ok, nil}
   end
 
-  def handle_info({:nodeup, _node, _node_type}, state) do
+  def handle_info({:nodeup, node, _node_type}, state) do
     Logger.debug("node up message")
+
+    IO.inspect(node)
 
     set_members(HordeRegistry)
     set_members(HordeSupervisor)
@@ -21,8 +23,11 @@ defmodule HordeTaskRouter.NodeObserver do
     {:noreply, state}
   end
 
-  def handle_info({:nodedown, _node, _node_type}, state) do
+  def handle_info({:nodedown, node, _node_type}, state) do
     Logger.debug("node down message")
+
+    IO.inspect(node)
+
 
     set_members(HordeRegistry)
     set_members(HordeSupervisor)
