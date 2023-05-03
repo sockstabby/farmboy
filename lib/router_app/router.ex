@@ -11,10 +11,7 @@ defmodule HordeTaskRouter.Router do
   @default_timeout :timer.seconds(2)
 
   def start_link(opts) do
-    #name = Keyword.get(opts, :name, __MODULE__)
     name = "taskrouter"
-    tname = via_tuple(name)
-    IO.inspect( tname )
     timeout = Keyword.get(opts, :timeout, @default_timeout)
 
     case GenServer.start_link(__MODULE__, timeout, name: via_tuple(name)) do
@@ -42,40 +39,47 @@ defmodule HordeTaskRouter.Router do
   end
 
   @impl true
-  @spec init(non_neg_integer) :: {:ok, non_neg_integer}
-  def init(timeout) do
-    Logger.debug("init called")
+  def init(_timeout) do
+    Logger.debug("init called ")
+
+    IO.inspect(self())
 
     Process.flag(:trap_exit, true)
-    value = get_global_tasks()
-    monitor_global_tasks(value)
-    Logger.debug("global tasks = ")
-    IO.inspect(value)
+    tasks = get_global_tasks()
 
-    {:ok, %{count: 0}}
+    IO.inspect(tasks)
+
+    Horde.Registry.put_meta(HordeTaskRouter.HordeRegistry, "tasks", [])
+
+    #important that we do this
+    monitor_global_tasks(tasks)
+
+    Logger.debug("global tasks = ")
+    IO.inspect(tasks)
+
+    {:ok, %{count: 0, tasks: tasks}}
   end
 
   @impl true
   def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
     Logger.debug("DOWN CALLED ref = ")
     IO.inspect(ref)
-    Process.sleep(500)
-
     Logger.debug("tasks before filter =")
-    tasks = get_global_tasks()
+    tasks = Map.get(state, "tasks")
     IO.inspect(tasks)
-    Process.sleep(500)
 
     filtered = Enum.filter(tasks, fn x -> x.ref != ref end)
 
     Logger.debug("tasks after filter =")
     IO.inspect(filtered)
-    #Process.sleep(500)
 
-    # not atomic. however if we can guarantee that this is the only process running,
-    # we dont need to worry about it
-    Horde.Registry.put_meta(HordeTaskRouter.HordeRegistry, "tasks", filtered)
-    {:noreply, state}
+    {:noreply, Map.put(state, "tasks", filtered )}
+  end
+
+  @impl true
+  def handle_info({:exit, reason}, _state) do
+    IO.inspect(":exit received")
+    exit(reason)
   end
 
   @impl true
@@ -83,7 +87,6 @@ defmodule HordeTaskRouter.Router do
     IO.puts("Unexpected message in handle_info: #{inspect(msg)}")
     {:noreply, state}
   end
-
 
   # the following function can be called from the UI
   # or from the scheduler.
@@ -94,8 +97,6 @@ defmodule HordeTaskRouter.Router do
         Node.list
         |> Enum.map(fn x -> Atom.to_string(x) end )
         |> Enum.filter(fn x -> String.contains?(x, "worker") end )
-
-
 
     IO.inspect(available_workers)
 
@@ -112,25 +113,37 @@ defmodule HordeTaskRouter.Router do
 
     task = Task.Supervisor.async_nolink({Chat.TaskSupervisor,  String.to_atom(worker_node)}, FirstDistributedTask, String.to_atom(method), [roomid, origin_node, args])
     IO.inspect(task)
-    append_task_to_global_tasks(task)
 
-    {:noreply, %{count: state.count + 1} }
+    new_state = Map.put(state, :count, state.count + 1 )
+
+    new_tasks = [task | state.tasks]
+
+    IO.inspect("new tasks = ")
+    IO.inspect(length(new_tasks))
+
+
+
+    new_state2 = Map.put(new_state, :tasks, new_tasks)
+
+    IO.inspect("new state = ")
+    IO.inspect(new_state2)
+
+
+    {:noreply, new_state2 }
   end
 
   @impl true
-  def handle_cast({:get_tasks }, state) do
-    Logger.debug("get_tasks")
-    tasks = get_global_tasks()
-    IO.inspect(tasks)
-    {:noreply, state }
-  end
+  def terminate(reason, state) do
+    IO.puts "#{__MODULE__}.terminate/2 called with reason: #{inspect reason}"
+    #save off our task state state
+    IO.inspect(state.tasks)
 
-  def append_task_to_global_tasks(task) do
-    tasks = get_global_tasks()
-    new_tasks = [task | tasks]
-    Horde.Registry.put_meta(HordeTaskRouter.HordeRegistry, "tasks", new_tasks)
-  end
+    Horde.Registry.put_meta(HordeTaskRouter.HordeRegistry, "tasks", state.tasks)
 
+
+    IO.puts "Done saving to horde"
+
+  end
 
   def via_tuple(name), do: {:via, Horde.Registry, {HordeTaskRouter.HordeRegistry, name}}
 
