@@ -64,16 +64,14 @@ defmodule HordeTaskRouter.Router do
   def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
     Logger.debug("DOWN CALLED ref = ")
     IO.inspect(ref)
-    Logger.debug("tasks before filter =")
-    tasks = Map.get(state, "tasks")
-    IO.inspect(tasks)
+    tasks = Map.get(state, :tasks)
 
     filtered = Enum.filter(tasks, fn x -> x.ref != ref end)
 
     Logger.debug("tasks after filter =")
     IO.inspect(filtered)
 
-    {:noreply, Map.put(state, "tasks", filtered )}
+    {:noreply, Map.put(state, :tasks, filtered )}
   end
 
   @impl true
@@ -105,7 +103,6 @@ defmodule HordeTaskRouter.Router do
 
     IO.inspect("worker count = #{total_workers}")
     IO.inspect("worker_index = #{worker_index}")
-
     IO.inspect("count = #{state.count}")
 
     worker_node = Enum.at(available_workers, worker_index)
@@ -115,34 +112,17 @@ defmodule HordeTaskRouter.Router do
     IO.inspect(task)
 
     new_state = Map.put(state, :count, state.count + 1 )
-
     new_tasks = [task | state.tasks]
-
-    IO.inspect("new tasks = ")
-    IO.inspect(length(new_tasks))
-
-
-
     new_state2 = Map.put(new_state, :tasks, new_tasks)
-
-    IO.inspect("new state = ")
-    IO.inspect(new_state2)
-
-
     {:noreply, new_state2 }
   end
 
   @impl true
   def terminate(reason, state) do
-    IO.puts "#{__MODULE__}.terminate/2 called with reason: #{inspect reason}"
+    Logger.info("#{__MODULE__}.terminate/2 called with reason: #{inspect reason}")
     #save off our task state state
-    IO.inspect(state.tasks)
-
     Horde.Registry.put_meta(HordeTaskRouter.HordeRegistry, "tasks", state.tasks)
-
-
-    IO.puts "Done saving to horde"
-
+    Logger.info("saving state to horde memory")
   end
 
   def via_tuple(name), do: {:via, Horde.Registry, {HordeTaskRouter.HordeRegistry, name}}
