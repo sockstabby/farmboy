@@ -92,8 +92,8 @@ defmodule HordeTaskRouter.Router do
   end
 
   @impl true
-  def handle_info({ ref, %{worker_registration: deets}}, state) do
-    %{ host: host, items: work} = deets
+  def handle_info({ _ref, %{worker_registration: deets}}, state) do
+    %{host: host, items: work} = deets
 
     Logger.debug("host: #{inspect(host)}")
     Logger.debug("work: #{inspect(work)}")
@@ -133,6 +133,10 @@ defmodule HordeTaskRouter.Router do
     Logger.info("worker node = #{worker_node}")
 
     task = Task.Supervisor.async_nolink({Chat.TaskSupervisor,  String.to_atom(worker_node)}, FirstDistributedTask, String.to_atom(method), [roomid, origin_node, args])
+    task =  Map.from_struct(task)
+    task = Map.put(task, :worker, worker_node )
+    task = Map.put(task, :method, method )
+    task = Map.put(task, :args, args )
     Logger.info(task)
 
     new_state = Map.put(state, :count, state.count + 1 )
