@@ -6,6 +6,7 @@ defmodule HordeTaskRouter.Router do
   use GenServer
   import Crontab.CronExpression
 
+  @worker_poll_freq  30_000
   require Logger
 
   def start_link(opts) do
@@ -21,11 +22,30 @@ defmodule HordeTaskRouter.Router do
       end
   end
 
+  def execute_task(task) do
+    Logger.debug("Executing task")
 
-  def hello(id) do
-    Logger.debug("woohoo it worked")
+    parms = %{object: "Task #{task.taskid}",
+      method: "Task #{task.taskid}",
+      args: task.config,
+      roomid: "room:123",
+      origin_node: "scheduler"
+    }
+
+    if task.enabled == true do
+      GenServer.cast({:via, Horde.Registry, {HordeTaskRouter.HordeRegistry, "taskrouter"}},
+       {:run_task, parms})
+    end
   end
 
+  def execute_task(nil) do
+    Logger.debug("Task does not exist")
+  end
+
+  def hello(taskid) do
+    task = Scheduler.ScheduledTasks |> Tasks.Repo.get(taskid)
+    execute_task(task)
+  end
 
   def monitor_global_tasks([]) do
     Logger.debug("monitor_global_task empty")
@@ -75,7 +95,37 @@ defmodule HordeTaskRouter.Router do
       |> Scheduler.Quantum.add_job()
     end )
 
-    {:ok, %{count: 0, tasks: tasks, worker_details: %{} }}
+
+    #start polling workers load average
+    Process.send_after(self(), :poll_worker_resources,  @worker_poll_freq)
+
+    {:ok, %{count: 0, tasks: tasks, worker_details: %{}, resource_info: %{}, task_workers: [] }}
+  end
+
+  @impl true
+  def handle_info(:poll_worker_resources, state) do
+    #Logger.debug("Poll worker resources")
+
+    available_workers =
+      Node.list
+      |> Enum.map(fn x -> Atom.to_string(x) end )
+      |> Enum.filter(fn x -> String.contains?(x, "worker") end )
+
+    # when a schedule fires
+    # we grab the list of workers
+    # and then we join with resource_info to create a new array
+    #[ { host: :worker1, avg5: 65}, ... ]
+
+     # finally we sort the list and choose the item with the least
+     # load average
+
+    # query workers
+    _deets = Enum.map(available_workers, fn worker_node ->
+        %{worker: worker_node, task: Task.Supervisor.async_nolink({Chat.TaskSupervisor,  String.to_atom(worker_node)}, FirstDistributedTask, String.to_atom("get_worker_resources"), []) }
+    end)
+
+    Process.send_after(self(), :poll_worker_resources,  @worker_poll_freq)
+    {:noreply, state}
   end
 
   @impl true
@@ -108,7 +158,16 @@ defmodule HordeTaskRouter.Router do
   end
 
   @impl true
-  def handle_info({ _ref, %{worker_registration: deets}}, state) do
+  def handle_info({_ref, %{worker_resource_info: deets}}, state) do
+    old_val = state.resource_info
+    new_val = Map.put( old_val, Atom.to_string(deets.host), deets.avg5 )
+    ret = Map.put( state, :resource_info, new_val)
+
+    {:noreply, ret}
+  end
+
+  @impl true
+  def handle_info({_ref, %{worker_registration: deets}}, state) do
     %{host: host, items: work} = deets
 
     Logger.debug("host: #{inspect(host)}")
@@ -116,6 +175,12 @@ defmodule HordeTaskRouter.Router do
 
     new_worker_details = Map.put(state.worker_details, host, work)
     new_state = Map.put(state, :worker_details, new_worker_details)
+
+    # Todo: we need a helper map like
+    # %{ taskid: [ worker1, worker2, worker3], taskid: [worker1, worker5], ... }
+
+    # store in task_workers
+
     {:noreply, new_state}
   end
 
@@ -125,10 +190,64 @@ defmodule HordeTaskRouter.Router do
     {:noreply, state}
   end
 
+  @impl true
+  def handle_cast({:task_item_removed, task }, state) do
+    id = task.id |> Integer.to_string() |> String.to_atom()
+
+    Logger.debug("task_item_removed called, id = #{inspect(id)} ")
+
+    Scheduler.Quantum.delete_job(id)
+    Logger.debug("Task item removed")
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_cast({:task_item_added, {:ok, task}}, state) do
+
+    id = task.id |> Integer.to_string() |> String.to_atom()
+
+    Logger.debug("task_item_added called, id = #{inspect(id)} ")
+
+
+    Scheduler.Quantum.new_job()
+      |> Quantum.Job.set_name(id)
+      |> Quantum.Job.set_schedule(sigil_e(task.schedule, nil) )
+      |> Quantum.Job.set_task({HordeTaskRouter.Router, :hello, [task.id]})
+      |> Scheduler.Quantum.add_job()
+
+    Logger.debug("added new task")
+    {:noreply, state}
+  end
+
+
+  @impl true
+  def handle_cast({:task_schedule_changed, task }, state) do
+    # when this happens we need to delete the item from the schedule
+    # and then re-add it.
+
+    id = task.id |> Integer.to_string() |> String.to_atom()
+
+    Scheduler.Quantum.delete_job(id)
+
+    Scheduler.Quantum.new_job()
+    |> Quantum.Job.set_name(id)
+    |> Quantum.Job.set_schedule(sigil_e(task.schedule, nil) )
+    |> Quantum.Job.set_task({HordeTaskRouter.Router, :hello, [task.id]})
+    |> Scheduler.Quantum.add_job()
+
+    Logger.debug("re-added task with new schedule")
+
+    {:noreply, state}
+
+  end
+
+
   # the following function can be called from the UI
   # or from the scheduler.
   @impl true
   def handle_cast({:run_task, %{object: _object, method: method, args: args, roomid: roomid, origin_node: origin_node} }, state) do
+
+    Logger.debug("RUNNING TASK")
 
     available_workers =
         Node.list
@@ -148,7 +267,7 @@ defmodule HordeTaskRouter.Router do
     worker_node = Enum.at(available_workers, worker_index)
     Logger.info("worker node = #{worker_node}")
 
-    task = Task.Supervisor.async_nolink({Chat.TaskSupervisor,  String.to_atom(worker_node)}, FirstDistributedTask, String.to_atom(method), [roomid, origin_node, args])
+    task = Task.Supervisor.async_nolink({Chat.TaskSupervisor,  String.to_atom(worker_node)}, FirstDistributedTask, :hello, [roomid, origin_node, method, args])
     task =  Map.from_struct(task)
     task = Map.put(task, :worker, worker_node )
     task = Map.put(task, :method, method )

@@ -2,6 +2,34 @@
 
 Monitors all launched tasks
 
+example commands
+
+st = %Scheduler.ScheduledTasks{taskid: 1, config: "{}", schedule: "\* \*", name: "my task" }
+
+Tasks.Repo.insert(st)
+
+querying the table
+
+Scheduler.ScheduledTasks |> Ecto.Query.first
+
+Scheduler.ScheduledTasks |> Ecto.Query.first |> Tasks.Repo.one
+
+To get all records in the table
+
+Scheduler.ScheduledTasks |> Tasks.Repo.all
+
+fetch a record based on id use
+
+Scheduler.ScheduledTasks |> Tasks.Repo.get(33)
+
+or by attribute
+
+Scheduler.ScheduledTasks |> Tasks.Repo.get_by(first_name: "Ryan")
+
+for more examples see
+
+https://hexdocs.pm/ecto/getting-started.html
+
 for testing shutdown we can send this message
 
 :observer.start
