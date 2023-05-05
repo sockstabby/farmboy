@@ -4,6 +4,8 @@ defmodule HordeTaskRouter.Router do
   """
 
   use GenServer
+  import Crontab.CronExpression
+
   require Logger
 
   def start_link(opts) do
@@ -17,6 +19,11 @@ defmodule HordeTaskRouter.Router do
         Logger.debug("already started at #{inspect(pid)}, returning :ignore")
         :ignore
       end
+  end
+
+
+  def hello(id) do
+    Logger.debug("woohoo it worked")
   end
 
 
@@ -36,7 +43,7 @@ defmodule HordeTaskRouter.Router do
   @impl true
   def init(_opts) do
     :net_kernel.monitor_nodes(true, node_type: :visible)
-    IO.inspect(self())
+    Logger.debug("self = #{inspect(self())}")
     Process.flag(:trap_exit, true)
     tasks = get_global_tasks()
     Horde.Registry.put_meta(HordeTaskRouter.HordeRegistry, "tasks", [])
@@ -52,24 +59,33 @@ defmodule HordeTaskRouter.Router do
       |> Enum.filter(fn x -> String.contains?(x, "worker") end )
 
 
+    # query workers
     _deets = Enum.map(available_workers, fn worker_node ->
         %{worker: worker_node, task: Task.Supervisor.async_nolink({Chat.TaskSupervisor,  String.to_atom(worker_node)}, FirstDistributedTask, String.to_atom("get_worker_details"), []) }
     end)
+
+    scheduled_tasks = Scheduler.ScheduledTasks |> Tasks.Repo.all
+    Logger.debug("tasks from db = #{inspect(scheduled_tasks)}")
+
+    ret_ = Enum.map(scheduled_tasks, fn i ->
+      Scheduler.Quantum.new_job()
+      |> Quantum.Job.set_name(i.id |> Integer.to_string() |> String.to_atom())
+      |> Quantum.Job.set_schedule(sigil_e(i.schedule, nil) )
+      |> Quantum.Job.set_task({HordeTaskRouter.Router, :hello, [i.id]})
+      |> Scheduler.Quantum.add_job()
+    end )
 
     {:ok, %{count: 0, tasks: tasks, worker_details: %{} }}
   end
 
   @impl true
   def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
-    Logger.debug("DOWN CALLED")
-    IO.inspect(ref)
+    Logger.debug ("DOWN CALLED ref = #{inspect(ref)}")
     tasks = Map.get(state, :tasks)
 
     filtered = Enum.filter(tasks, fn x -> x.ref != ref end)
 
-    Logger.debug("tasks after filter")
-    IO.inspect(filtered)
-
+    Logger.debug("tasks after filter #{inspect(filtered)}")
     {:noreply, Map.put(state, :tasks, filtered )}
   end
 

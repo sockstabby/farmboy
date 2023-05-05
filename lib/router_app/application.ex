@@ -12,6 +12,8 @@ defmodule HordeTaskRouter.Application do
       HordeTaskRouter.HordeRegistry,
       HordeTaskRouter.HordeSupervisor,
       HordeTaskRouter.NodeObserver,
+      Tasks.Repo,
+      Scheduler.Quantum,
       HordeTaskRouter.Router
     ]
 

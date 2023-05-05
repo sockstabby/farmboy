@@ -23,7 +23,10 @@ defmodule HordeTaskRouter.MixProject do
   defp deps do
     [
       {:libcluster, "~> 3.3"},
-      {:horde, "~> 0.8.3"}
+      {:horde, "~> 0.8.3"},
+      {:ecto_sql, "~> 3.6"},
+      {:postgrex, ">= 0.0.0"},
+      {:quantum, "~> 3.5"}
     ]
   end
 end
