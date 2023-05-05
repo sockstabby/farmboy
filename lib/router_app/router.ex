@@ -6,7 +6,7 @@ defmodule HordeTaskRouter.Router do
   use GenServer
   import Crontab.CronExpression
 
-  @worker_poll_freq  30_000
+  @worker_poll_freq  5_000
   require Logger
 
   def start_link(opts) do
@@ -26,7 +26,7 @@ defmodule HordeTaskRouter.Router do
     Logger.debug("Executing task")
 
     parms = %{object: "Task #{task.taskid}",
-      method: "Task #{task.taskid}",
+      method: "#{task.taskid}",
       args: task.config,
       roomid: "room:123",
       origin_node: "scheduler"
@@ -98,8 +98,7 @@ defmodule HordeTaskRouter.Router do
 
     #start polling workers load average
     Process.send_after(self(), :poll_worker_resources,  @worker_poll_freq)
-
-    {:ok, %{count: 0, tasks: tasks, worker_details: %{}, resource_info: %{}, task_workers: [] }}
+    {:ok, %{count: 0, tasks: tasks, worker_details: %{}, resource_info: %{}, task_workers:  %{}}}
   end
 
   @impl true
@@ -160,7 +159,9 @@ defmodule HordeTaskRouter.Router do
   @impl true
   def handle_info({_ref, %{worker_resource_info: deets}}, state) do
     old_val = state.resource_info
-    new_val = Map.put( old_val, Atom.to_string(deets.host), deets.avg5 )
+
+    #fix me deets.avg5 instead of :rand.uniform(700)
+    new_val = Map.put( old_val, Atom.to_string(deets.host), :rand.uniform(700) )
     ret = Map.put( state, :resource_info, new_val)
 
     {:noreply, ret}
@@ -168,18 +169,25 @@ defmodule HordeTaskRouter.Router do
 
   @impl true
   def handle_info({_ref, %{worker_registration: deets}}, state) do
-    %{host: host, items: work} = deets
+    %{host: host, items: work_items} = deets
 
-    Logger.debug("host: #{inspect(host)}")
-    Logger.debug("work: #{inspect(work)}")
+     #add task to task_workers and append host
+     Logger.debug("host: #{inspect(host)}")
+     Logger.debug("items: #{inspect(work_items)}")
 
-    new_worker_details = Map.put(state.worker_details, host, work)
+    task_workers = state.task_workers
+
+    #iterate work_items add each to global array keyed on task
+    task_worker_map = Enum.reduce(work_items, state.task_workers, fn i, acc ->
+      task_hosts = Map.get(task_workers, "#{i.taskid}", [] )
+      new_task_hosts = [host | task_hosts]
+      new_task_workers = Map.put(acc, "#{i.taskid}", new_task_hosts )
+      new_task_workers
+    end)
+
+    new_worker_details = Map.put(state.worker_details, host, work_items)
     new_state = Map.put(state, :worker_details, new_worker_details)
-
-    # Todo: we need a helper map like
-    # %{ taskid: [ worker1, worker2, worker3], taskid: [worker1, worker5], ... }
-
-    # store in task_workers
+    new_state = Map.put(new_state, :task_workers, task_worker_map)
 
     {:noreply, new_state}
   end
@@ -246,28 +254,32 @@ defmodule HordeTaskRouter.Router do
   # or from the scheduler.
   @impl true
   def handle_cast({:run_task, %{object: _object, method: method, args: args, roomid: roomid, origin_node: origin_node} }, state) do
+    Logger.debug("RUNNING TASK method = #{inspect(method)}")
 
-    Logger.debug("RUNNING TASK")
+    # get the workers for this method
+    workers = Map.get(state.task_workers, method, [] )
 
-    available_workers =
-        Node.list
-        |> Enum.map(fn x -> Atom.to_string(x) end )
-        |> Enum.filter(fn x -> String.contains?(x, "worker") end )
+    workers_with_resources = Enum.map(workers, fn i ->
+      resource_info = Map.get(state, :resource_info, %{} )
+      load = Map.get(resource_info, Atom.to_string(i), 0)
+      %{worker: i, load: load  }
+    end
+    )
 
-    #IO.inspect(available_workers)
-    Logger.info("available workers = #{available_workers}")
+    #Logger.debug("workers with resources = #{inspect(workers_with_resources)}")
+    #workers with resources = [%{load: 447, worker: :"worker@127.0.0.1"}]
 
-    total_workers = length(available_workers)
-    worker_index = rem(state.count, total_workers)
+    # now get the worker with the least load
+    worker_choice = Enum.reduce(workers_with_resources, {"fake_worker", 100_000_000 }, fn i, acc ->
+        if i.load < elem(acc, 1), do: {i.worker, i.load }, else: acc
+      end
+    )
 
-    Logger.info("worker count = #{total_workers}")
-    Logger.info("worker_index = #{worker_index}")
-    Logger.info("count = #{state.count}")
+    Logger.debug("chosen worker = #{inspect(worker_choice)}")
 
-    worker_node = Enum.at(available_workers, worker_index)
-    Logger.info("worker node = #{worker_node}")
+    worker_node = elem(worker_choice, 0)
 
-    task = Task.Supervisor.async_nolink({Chat.TaskSupervisor,  String.to_atom(worker_node)}, FirstDistributedTask, :hello, [roomid, origin_node, method, args])
+    task = Task.Supervisor.async_nolink({Chat.TaskSupervisor,  worker_node}, FirstDistributedTask, :hello, [roomid, origin_node, method, args])
     task =  Map.from_struct(task)
     task = Map.put(task, :worker, worker_node )
     task = Map.put(task, :method, method )
