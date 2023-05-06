@@ -102,6 +102,11 @@ defmodule HordeTaskRouter.Router do
   end
 
   @impl true
+  def handle_info({:probe_worker, node}, state) do
+    Task.Supervisor.async_nolink({Chat.TaskSupervisor,  node}, FirstDistributedTask, String.to_atom("get_worker_details"), [])
+  end
+
+  @impl true
   def handle_info(:poll_worker_resources, state) do
     #Logger.debug("Poll worker resources")
 
@@ -134,7 +139,6 @@ defmodule HordeTaskRouter.Router do
 
     filtered = Enum.filter(tasks, fn x -> x.ref != ref end)
 
-    Logger.debug("tasks after filter #{inspect(filtered)}")
     {:noreply, Map.put(state, :tasks, filtered )}
   end
 
@@ -145,15 +149,49 @@ defmodule HordeTaskRouter.Router do
     {:noreply, state}
   end
 
-  def handle_info({:nodeup, _node, _node_type}, state) do
-    Logger.debug("node up in genserver message")
+  def handle_info({:nodeup, node, _node_type}, state) do
+    n = Atom.to_string(node)
+
+    if String.contains?(n, "worker") do
+      Logger.debug("WORKER ADDED ")
+      Process.send_after(self(), {:probe_worker, node },  1000)
+    end
+
     {:noreply, state}
   end
 
-  def handle_info({:nodedown, _node, _node_type}, state) do
-    Logger.debug("node down in genserver message")
-    #here we need to remove whatever task info we have on this node
-    {:noreply, state}
+  def handle_info({:nodedown, node, _node_type}, state) do
+
+    new_task_workers = Enum.reduce(state.task_workers, %{}, fn({k, v}, acc) ->
+        filtered_workers = Enum.filter(v, fn x -> x != node end )
+        Map.put(acc, k, filtered_workers)
+      end
+    )
+
+    new_resource_info = Enum.reduce(state.resource_info, %{}, fn({k, v}, acc) ->
+        if String.to_atom(k) == node do
+          acc
+        else
+          Map.put(acc, k, v)
+        end
+      end
+    )
+
+    new_worker_details = Enum.reduce(state.worker_details, %{}, fn({k, v}, acc) ->
+      if k == node do
+        acc
+      else
+        Map.put(acc, k, v)
+      end
+    end
+  )
+
+    Logger.debug("new_resource_info = #{inspect(new_resource_info)}")
+
+    new_state = Map.put(state, :task_workers, new_task_workers)
+    new_state = Map.put(new_state, :worker_details, new_worker_details)
+    {:noreply,  Map.put(new_state, :resource_info, new_resource_info)}
+
   end
 
   @impl true
@@ -216,7 +254,6 @@ defmodule HordeTaskRouter.Router do
 
     Logger.debug("task_item_added called, id = #{inspect(id)} ")
 
-
     Scheduler.Quantum.new_job()
       |> Quantum.Job.set_name(id)
       |> Quantum.Job.set_schedule(sigil_e(task.schedule, nil) )
@@ -265,9 +302,6 @@ defmodule HordeTaskRouter.Router do
       %{worker: i, load: load  }
     end
     )
-
-    #Logger.debug("workers with resources = #{inspect(workers_with_resources)}")
-    #workers with resources = [%{load: 447, worker: :"worker@127.0.0.1"}]
 
     # now get the worker with the least load
     worker_choice = Enum.reduce(workers_with_resources, {"fake_worker", 100_000_000 }, fn i, acc ->
