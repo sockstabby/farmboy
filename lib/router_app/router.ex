@@ -28,8 +28,9 @@ defmodule HordeTaskRouter.Router do
     parms = %{object: "Task #{task.taskid}",
       method: "#{task.taskid}",
       args: task.config,
-      roomid: "room:123",
-      origin_node: "scheduler"
+      roomid: "123",
+      origin_node: "scheduler",
+      object: task.id
     }
 
     if task.enabled == true do
@@ -134,7 +135,6 @@ defmodule HordeTaskRouter.Router do
 
   @impl true
   def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
-    Logger.debug ("DOWN CALLED ref = #{inspect(ref)}")
     tasks = Map.get(state, :tasks)
 
     filtered = Enum.filter(tasks, fn x -> x.ref != ref end)
@@ -290,40 +290,61 @@ defmodule HordeTaskRouter.Router do
   # the following function can be called from the UI
   # or from the scheduler.
   @impl true
-  def handle_cast({:run_task, %{object: _object, method: method, args: args, roomid: roomid, origin_node: origin_node} }, state) do
+  def handle_cast({:run_task, %{object: object, method: method, args: args, roomid: roomid, origin_node: origin_node} }, state) do
     Logger.debug("RUNNING TASK method = #{inspect(method)}")
 
-    # get the workers for this method
-    workers = Map.get(state.task_workers, method, [] )
+    # see if this method aka id primary key exists already.
+    # if so we wont run another instance of it
 
-    workers_with_resources = Enum.map(workers, fn i ->
-      resource_info = Map.get(state, :resource_info, %{} )
-      load = Map.get(resource_info, Atom.to_string(i), 0)
-      %{worker: i, load: load  }
+    index = Enum.find_index(state.tasks, fn x -> x.object == object end)
+
+
+    case index do
+      nil ->
+        # get the workers for this method
+        workers = Map.get(state.task_workers, method, [] )
+
+        workers_with_resources = Enum.map(workers, fn i ->
+          resource_info = Map.get(state, :resource_info, %{} )
+          load = Map.get(resource_info, Atom.to_string(i), 0)
+          %{worker: i, load: load  }
+        end
+        )
+
+        # now get the worker with the least load
+        worker_choice = Enum.reduce(workers_with_resources, {"fake_worker", 100_000_000 }, fn i, acc ->
+            if i.load < elem(acc, 1), do: {i.worker, i.load }, else: acc
+          end
+        )
+
+        Logger.debug("chosen worker = #{inspect(worker_choice)}")
+
+        worker_node = elem(worker_choice, 0)
+
+        {{year, month, day}, {hour, minute, second}} =  :calendar.local_time()
+
+        dt = %DateTime{year: year, month: month, day: day, hour: hour, minute: minute, second: second, microsecond: {0, 0}, utc_offset: 3600, std_offset: 0, time_zone: "Europe/Warsaw", zone_abbr: "CET"}
+        iso = DateTime.to_iso8601(dt)
+
+        task = Task.Supervisor.async_nolink({Chat.TaskSupervisor,  worker_node}, FirstDistributedTask, :hello, [roomid, origin_node, object, method, args])
+        task =  Map.from_struct(task)
+        task = Map.put(task, :worker, worker_node )
+        task = Map.put(task, :object, object )
+        task = Map.put(task, :method, method )
+        task = Map.put(task, :args, args )
+        task = Map.put(task, :time_started, iso )
+
+        Logger.info(task)
+
+        new_state = Map.put(state, :count, state.count + 1 )
+        new_tasks = [task | state.tasks]
+        new_state2 = Map.put(new_state, :tasks, new_tasks)
+        {:noreply, new_state2 }
+
+      _ ->
+        Logger.debug("Task is still running")
+        {:noreply, state }
     end
-    )
-
-    # now get the worker with the least load
-    worker_choice = Enum.reduce(workers_with_resources, {"fake_worker", 100_000_000 }, fn i, acc ->
-        if i.load < elem(acc, 1), do: {i.worker, i.load }, else: acc
-      end
-    )
-
-    Logger.debug("chosen worker = #{inspect(worker_choice)}")
-
-    worker_node = elem(worker_choice, 0)
-
-    task = Task.Supervisor.async_nolink({Chat.TaskSupervisor,  worker_node}, FirstDistributedTask, :hello, [roomid, origin_node, method, args])
-    task =  Map.from_struct(task)
-    task = Map.put(task, :worker, worker_node )
-    task = Map.put(task, :method, method )
-    task = Map.put(task, :args, args )
-    Logger.info(task)
-
-    new_state = Map.put(state, :count, state.count + 1 )
-    new_tasks = [task | state.tasks]
-    new_state2 = Map.put(new_state, :tasks, new_tasks)
-    {:noreply, new_state2 }
   end
 
   @impl true

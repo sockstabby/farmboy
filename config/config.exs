@@ -2,8 +2,8 @@ import Config
 
 config :task_router, Tasks.Repo,
   username: "postgres",
-  password: "postgres",
-  hostname: "localhost",
+  password: "postgresSuperUserPsw",
+  hostname: "mypostgres",
   database: "phoenix_react_dev",
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,

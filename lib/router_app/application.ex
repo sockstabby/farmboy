@@ -4,11 +4,12 @@ defmodule HordeTaskRouter.Application do
   @moduledoc false
 
   use Application
+  require Logger
 
   @impl true
   def start(_type, _args) do
-    children = [
-      {Cluster.Supervisor, [topologies(), [name: BackgroundJob.ClusterSupervisor]]},
+    children_dev = [
+      {Cluster.Supervisor, [topologies_gossip(), [name: TaskRouter.ClusterSupervisor]]},
       HordeTaskRouter.HordeRegistry,
       HordeTaskRouter.HordeSupervisor,
       HordeTaskRouter.NodeObserver,
@@ -17,16 +18,71 @@ defmodule HordeTaskRouter.Application do
       HordeTaskRouter.Router
     ]
 
-    # See https://hexdocs.pm/elixir/Supervisor.html
-    # for other strategies and supported options
+
+    children_prod = [
+      Supervisor.child_spec({Cluster.Supervisor, [topologies_phoenix(), [name: BackgroundJob.ClusterSupervisorPhoenix]]} , id: :phoenix_cluster_sup),
+      Supervisor.child_spec({Cluster.Supervisor, [topologies_router(), [name: BackgroundJob.ClusterSupervisorRouter]]} , id: :router_cluster_sup),
+      HordeTaskRouter.HordeRegistry,
+      HordeTaskRouter.HordeSupervisor,
+      HordeTaskRouter.NodeObserver,
+      Tasks.Repo,
+      Scheduler.Quantum,
+      HordeTaskRouter.Router
+    ]
+
+    env = String.to_atom(System.get_env("MIX_ENV") || "dev")
+    Logger.debug("env = #{env}")
+
+    children = if env == :dev, do: children_dev, else: children_prod
+
+
     opts = [strategy: :one_for_one, name: HordeTaskRouter.Supervisor]
     Supervisor.start_link(children, opts)
   end
 
-  defp topologies do
+  defp topologies_gossip do
     [
       background_job: [
         strategy: Cluster.Strategy.Gossip
+      ]
+    ]
+  end
+
+  defp topologies do
+    [
+      k8s_example: [
+        strategy: Elixir.Cluster.Strategy.Kubernetes.DNS,
+        config: [
+          service: "cluster-svc",
+          application_name: "worker",
+          polling_interval: 3_000
+        ]
+      ]
+    ]
+  end
+
+  defp topologies_phoenix do
+    [
+      k8s_example: [
+        strategy: Elixir.Cluster.Strategy.Kubernetes.DNS,
+        config: [
+          service: "cluster-svc",
+          application_name: "hello",
+          polling_interval: 3_000
+        ]
+      ]
+    ]
+  end
+
+  defp topologies_router do
+    [
+      k8s_example: [
+        strategy: Elixir.Cluster.Strategy.Kubernetes.DNS,
+        config: [
+          service: "cluster-svc",
+          application_name: "task_router",
+          polling_interval: 3_000
+        ]
       ]
     ]
   end
