@@ -199,7 +199,7 @@ defmodule HordeTaskRouter.Router do
     old_val = state.resource_info
 
     #fix me deets.avg5 instead of :rand.uniform(700)
-    new_val = Map.put( old_val, Atom.to_string(deets.host), :rand.uniform(700) )
+    new_val = Map.put( old_val, Atom.to_string(deets.host), deets.avg5 )
     ret = Map.put( state, :resource_info, new_val)
 
     {:noreply, ret}
