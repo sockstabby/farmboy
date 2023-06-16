@@ -1,54 +1,47 @@
-# HordeTaskRouter
+# Introduction
 
-Monitors all launched tasks
+Farmboy is a distributed and scalable task runner. This is originally intended to be used to collect thousands of datapoints from an external API on a schedule.
 
-example commands
+The project is split up into three repos.
 
-st = %Scheduler.ScheduledTasks{taskid: 1, config: "{}", schedule: "\* \*", name: "my task" }
+Farmboy - is an Elixir OTP Genserver that is reponsible for discovering workers in a cluster. It uses the Quantum Elixir module to schedule tasks. It distibutes the work by choosing a node with the least load average. It invokes a Farmboy task by passing it the configuration whenever it is scheduled to run.
 
-Tasks.Repo.insert(st)
+Farmboy Task - is the task that you define. This repo provides a sample implementation. Tasks can publish status messages which in turn get written to a Phoenix channel so end users can see the logs in realtime.
 
-querying the table
+Farmboy Web - A user interface, webserver and API to configure tasks and get task status and logs.
 
-Scheduler.ScheduledTasks |> Ecto.Query.first
+Take a look at the in app screenshots in the Web app repo's [appscreens](https://github.com/sockstabby/farmboyweb/tree/master/appscreens) folder.
 
-Scheduler.ScheduledTasks |> Ecto.Query.first |> Tasks.Repo.one
+# Building
 
-To get all records in the table
+You have several options to build this code
 
-Scheduler.ScheduledTasks |> Tasks.Repo.all
+1. Run a debug build
 
-fetch a record based on id use
+   ```
+   iex --name router@127.0.0.1 --cookie asdf -S mix
+   ```
 
-Scheduler.ScheduledTasks |> Tasks.Repo.get(33)
+   Note this has no dependency on the the task. Tasks can be loaded at any time
+   and are detected when they join the cluster.
 
-or by attribute
+2. You can run a production release to run in docker or kubernetes.
 
-Scheduler.ScheduledTasks |> Tasks.Repo.get_by(first_name: "Ryan")
+   ```
+   docker build . -t routerimage
+   docker tag routerimage {docker-hub-username}/{default-repo-folder-name}:routerimage
+   docker push {docker-hub-username}/{default-repo-folder-name}:routerimage
 
-for more examples see
+   ```
 
-https://hexdocs.pm/ecto/getting-started.html
+   Now it will be availabe to create containers in your Kubernetes
+   cluster. See the router_dep.yaml file in Kubs repo for an example of how it gets referenced.
 
-for testing shutdown we can send this message
+# Interesting notes on the implementation.
 
-:observer.start
-{ exit,"what"}
+This app tracks the PIDS and reference returned from monitor
 
-at this point the genserver will write all its info to horde
-so that it can continue monitoring
-
-To support updates Whenever it starts it monitors whatever is in the
-horde registry
-
-Registry simply stores pids
-
-and task router calls monitor on them
-
-If pid of task process disappears while router is not monitoring
-it wont matter because when it restarts it will rectify.
-
-HEres the proof
+```
 oldpid = spawn(fn -> 1 + 2 end)
 #PID<0.111.0>
 iex(10)> pid = spawn(fn -> 1 + 2 end)
@@ -63,35 +56,8 @@ iex(16)> flush()
 :ok
 iex(17)> Process.monitor(oldpid)
 #Reference<0.109932022.3302227970.196940>
-iex(18)> flush()  
+iex(18)> flush()
 {:DOWN, #Reference<0.109932022.3302227970.196940>, :process, #PID<0.111.0>,
 :noproc}
 :ok
-
-**TODO: Add description**
-
-## Installation
-
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `horde_background_job` to your list of dependencies in `mix.exs`:
-
-```elixir
-def deps do
-  [
-    {:horde_background_job, "~> 0.1.0"}
-  ]
-end
 ```
-
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at [https://hexdocs.pm/horde_background_job](https://hexdocs.pm/horde_background_job).
-
-my model is a little different
-
-they supervise Router - a genserver with an execute method that
-calls a task. ( in same node )
-
-my case
-instead of calling a task in same node lets call a task in
-another node. lots of reuse here.
