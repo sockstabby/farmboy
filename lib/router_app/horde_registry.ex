@@ -1,4 +1,4 @@
-defmodule HordeTaskRouter.HordeRegistry do
+defmodule Farmboy.HordeRegistry do
   use Horde.Registry
 
   def start_link(_) do

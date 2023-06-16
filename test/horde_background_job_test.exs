@@ -1,8 +1,8 @@
-defmodule HordeTaskRouterTest do
+defmodule FarmboyTest do
   use ExUnit.Case
-  doctest HordeTaskRouter
+  doctest Farmboy
 
   test "greets the world" do
-    assert HordeTaskRouter.hello() == :world
+    assert Farmboy.hello() == :world
   end
 end

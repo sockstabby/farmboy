@@ -1,4 +1,4 @@
-defmodule HordeTaskRouter.HordeSupervisor do
+defmodule Farmboy.HordeSupervisor do
   use Horde.DynamicSupervisor
 
   def start_link(_) do

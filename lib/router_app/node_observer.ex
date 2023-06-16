@@ -1,21 +1,18 @@
-defmodule HordeTaskRouter.NodeObserver do
+defmodule Farmboy.NodeObserver do
   use GenServer
   require Logger
 
-  alias HordeTaskRouter.{HordeRegistry, HordeSupervisor}
+  alias Farmboy.{HordeRegistry, HordeSupervisor}
 
   def start_link(_), do: GenServer.start_link(__MODULE__, [])
 
   def init(_) do
     :net_kernel.monitor_nodes(true, node_type: :visible)
-
     {:ok, nil}
   end
 
   def handle_info({:nodeup, node, _node_type}, state) do
     Logger.debug("node up message")
-
-    IO.inspect(node)
 
     set_members(HordeRegistry)
     set_members(HordeSupervisor)
@@ -23,11 +20,8 @@ defmodule HordeTaskRouter.NodeObserver do
     {:noreply, state}
   end
 
-  def handle_info({:nodedown, node, _node_type}, state) do
+  def handle_info({:nodedown, _node, _node_type}, state) do
     Logger.debug("node down message")
-
-    IO.inspect(node)
-
 
     set_members(HordeRegistry)
     set_members(HordeSupervisor)
